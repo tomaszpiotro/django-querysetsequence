@@ -34,12 +34,18 @@ class Article(models.Model):
     author = models.ForeignKey(Author, on_delete=models.CASCADE)
     publisher = models.ForeignKey(PeriodicalPublisher, related_name='published', on_delete=models.CASCADE)
     release = models.DateField()
+    # I need it to have different name than 'pages' from Book model
+    num_pages = models.PositiveSmallIntegerField()
 
     class Meta:
         get_latest_by = 'release'
 
     def __str__(self):
         return "%s by %s" % (self.title, self.author)
+
+    @property
+    def pages(self):
+        return self.num_pages
 
 
 class BlogPost(models.Model):

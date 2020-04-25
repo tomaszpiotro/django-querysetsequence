@@ -44,9 +44,11 @@ class TestBase(TestCase):
 
         # Alice wrote some articles.
         Article.objects.create(title="Django Rocks", author=alice,
-                               publisher=mad_magazine, release=date(1980, 4, 21))
+                               publisher=mad_magazine, release=date(1980, 4, 21),
+                               num_pages=5)
         Article.objects.create(title="Alice in Django-land", author=alice,
-                               publisher=mad_magazine, release=date(1990, 8, 14))
+                               publisher=mad_magazine, release=date(1990, 8, 14),
+                               num_pages=30)
 
         # Bob wrote a couple of books, an article, and a blog post.
         Book.objects.create(title="Fiction", author=bob, publisher=big_books,
@@ -54,7 +56,8 @@ class TestBase(TestCase):
         Book.objects.create(title="Biography", author=bob, publisher=big_books,
                             pages=20, release=date(2002, 12, 24))
         Article.objects.create(title="Some Article", author=bob,
-                               publisher=mad_magazine, release=date(1979, 1, 1))
+                               publisher=mad_magazine, release=date(1979, 1, 1),
+                               num_pages=40)
         BlogPost.objects.create(title="Post", author=bob,
                                 publisher=wacky_website)
 
@@ -853,7 +856,7 @@ class TestOrderBy(TestBase):
         # Add another object with the same title, but in a different QuerySet.
         Article.objects.create(title="Fiction", author=self.alice,
                                publisher=self.mad_magazine,
-                               release=date(2018, 10, 3))
+                               release=date(2018, 10, 3), num_pages=5)
 
         with self.assertNumQueries(0):
             qss = self.all.order_by('title', '-#')
@@ -1006,6 +1009,15 @@ class TestOrderBy(TestBase):
                 'Fiction',
             ]
             self.assertEqual(data, expected)
+
+    def test_order_by_zipped(self):
+        with self.assertNumQueries(0):
+            qss = self.all.order_by_zipped('pages', 'num_pages')
+
+        # Check the titles are properly ordered.
+        with self.assertNumQueries(2):
+            data = [it.pages for it in qss]
+        self.assertEqual(data, [5, 10, 20, 30, 40])
 
     def test_empty(self):
         """Calling order_by on an empty QuerySetSequence doesn't error."""
@@ -1179,7 +1191,7 @@ class TestSlicing(TestBase):
         """Test slicing if the start and end are within the same QuerySet."""
         Article.objects.create(title='Another Article', author=self.bob,
                                publisher=self.mad_magazine,
-                               release=date(2018, 10, 3))
+                               release=date(2018, 10, 3), num_pages=5)
 
         qss = QuerySetSequence(Article.objects.all())[1:3]
 

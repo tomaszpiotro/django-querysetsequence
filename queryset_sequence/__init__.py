@@ -77,7 +77,7 @@ class ComparatorMixin:
         return cmp(value1, value2)
 
     @classmethod
-    def _generate_comparator(cls, field_names):
+    def _generate_comparator(cls, field_names, querysets=None):
         """
         Construct a comparator function based on the field names. The comparator
         returns the first non-zero comparison value.
@@ -102,6 +102,12 @@ class ComparatorMixin:
         field_names = [f.replace(LOOKUP_SEP, '.') for f in field_names]
 
         def comparator(i1, i2):
+            if querysets:
+                query_map = dict(zip([q.model for q in querysets], field_names))
+
+                v1 = attrgetter(query_map[i1.__class__])(i1)
+                v2 = attrgetter(query_map[i2.__class__])(i2)
+                return cls._cmp(v1, v2) * reverses[0]
             # Get a tuple of values for comparison.
             v1 = attrgetter(*field_names)(i1)
             v2 = attrgetter(*field_names)(i2)
@@ -130,6 +136,7 @@ class QuerySequenceIterable(ComparatorMixin):
         self._querysets = querysetsequence._querysets
         self._queryset_idxs = querysetsequence._queryset_idxs
         self._order_by = querysetsequence._order_by
+        self._zipped_ordering = querysetsequence._zipped_ordering
         self._standard_ordering = querysetsequence._standard_ordering
         self._low_mark = querysetsequence._low_mark
         self._high_mark = querysetsequence._high_mark
@@ -161,7 +168,7 @@ class QuerySequenceIterable(ComparatorMixin):
         index = 0
 
         # Create a comparison function based on the requested ordering.
-        _comparator = self._generate_comparator(self._order_by)
+        _comparator = self._generate_comparator(self._order_by, self._querysets if self._zipped_ordering else None)
         def comparator(tuple_1, tuple_2):
             # The last element in each tuple is the actual item to compare.
             return _comparator(tuple_1[2], tuple_2[2])
@@ -306,6 +313,7 @@ class QuerySetSequence(ComparatorMixin):
         self._set_querysets(args)
         # Some information necessary for properly iterating through a QuerySet.
         self._order_by = []
+        self._zipped_ordering = False
         self._standard_ordering = True
         self._low_mark, self._high_mark = 0, None
 
@@ -321,6 +329,7 @@ class QuerySetSequence(ComparatorMixin):
         clone = QuerySetSequence(*[qs._clone() for qs in self._querysets])
         clone._queryset_idxs = self._queryset_idxs
         clone._order_by = self._order_by
+        clone._zipped_ordering = self._zipped_ordering
         clone._standard_ordering = self._standard_ordering
         clone._low_mark = self._low_mark
         clone._high_mark = self._high_mark
@@ -551,6 +560,18 @@ class QuerySetSequence(ComparatorMixin):
 
         # But keep the original fields for the clone.
         clone._order_by = list(fields)
+        return clone
+
+    def order_by_zipped(self, *fields):
+        _, filtered_fields = self._separate_fields(*fields)
+
+        # Apply the filtered fields to each underlying QuerySet.
+        clone = self._clone()
+        clone._querysets = [qs.order_by(query_field) for query_field, qs in zip(filtered_fields, self._querysets)]
+
+        # But keep the original fields for the clone.
+        clone._order_by = list(fields)
+        clone._zipped_ordering = True
         return clone
 
     def reverse(self):
